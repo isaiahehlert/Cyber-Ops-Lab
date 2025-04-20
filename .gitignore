@@ -172,3 +172,21 @@ cython_debug/
 
 # PyPI configuration file
 .pypirc
+
+# Add these below the Python template lines
+
+# MacOS files
+.DS_Store
+
+# Logs
+*.log
+
+# VS Code
+.vscode/
+
+# Capture data or sensitive temp files
+*.pcap
+*.key
+*.crt
+
+
