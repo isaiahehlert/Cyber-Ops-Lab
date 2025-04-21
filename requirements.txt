@@ -1,1 +1,4 @@
 scapy
+openai
+langchain
+faiss-cpu
