@@ -1,0 +1,24 @@
+🛡️ Sentinel Daily Threat Summary
+Generated: 2025-04-21 01:34:28.741257
+========================================
+
+--- report_flagged_traffic_2025-04-21_00-25-47.log ---
+[!] Line 1: User-Agent: curl/7.68.0 from 192.168.1.15 to 172.217.3.110
+[!] Line 2: POST /api/login HTTP/1.1 from 192.168.1.25 to 192.168.1.1
+[!] Line 3: User-Agent: python-requests from 192.168.1.34 to 8.8.8.8
+
+--- report_flagged_traffic_2025-04-21_00-30-02.log ---
+[!] Line 1: User-Agent: curl/7.68.0 from 192.168.1.15 to 172.217.3.110
+[!] Line 2: POST /api/login HTTP/1.1 from 192.168.1.25 to 192.168.1.1
+[!] Line 3: User-Agent: python-requests from 192.168.1.34 to 8.8.8.8
+
+--- report_flagged_traffic_2025-04-21_01-15-51.log ---
+[!] Line 1: User-Agent: curl/7.68.0 from 192.168.1.15 to 172.217.3.110
+[!] Line 2: POST /api/login HTTP/1.1 from 192.168.1.25 to 192.168.1.1
+[!] Line 3: User-Agent: python-requests from 192.168.1.34 to 8.8.8.8
+
+--- report_flagged_traffic_2025-04-21_01-31-21.log ---
+[!] Line 1: User-Agent: curl/7.68.0 from 192.168.1.15 to 172.217.3.110
+[!] Line 2: POST /api/login HTTP/1.1 from 192.168.1.25 to 192.168.1.1
+[!] Line 3: User-Agent: python-requests from 192.168.1.34 to 8.8.8.8
+

@@ -1,0 +1,12 @@
+F6-C4-E6-68-03-75,Caitlin's iPhone
+BA-B4-80-7B-3B-E3,Isaiah's iPhone
+8C-26-0A-EA-3B-C6,Apple TV 4K
+C0-BF-BE-72-61-77,Asus VivoBook (Windows 11)
+90-6A-BE-DD-D1-67,Xbox Series S (Wired)
+90-6A-EB-DD-D1-64,Xbox Series S (Wireless)
+34-2F-BD-5E-1C-75,Caitlin's Nintendo Switch
+A4-CF-99-AF-26-14,Bedroom HomePod Mini
+AC-BC-B5-E3-73-16,HomePod L (Living Room - Left)
+AC-BC-B5-DE-92-EE,HomePod R (Living Room - Right)
+EE-8F-B7-D6-F4-F0,Caitlin's Apple Watch 5
+1E-77-98-F9-27-04,Family iPad 

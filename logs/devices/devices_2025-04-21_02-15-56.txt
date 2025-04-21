@@ -1,0 +1,4 @@
+Starting Nmap 7.80 ( https://nmap.org ) at 2025-04-21 02:15 UTC
+Nmap scan report for 1d78e79e-3d13-4aba-824d-758aeb8fb06f.internal.cloudapp.net (10.0.0.173)
+Host is up (0.000095s latency).
+Nmap done: 256 IP addresses (1 host up) scanned in 19.62 seconds
