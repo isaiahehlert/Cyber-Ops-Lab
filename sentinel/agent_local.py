@@ -5,7 +5,7 @@ Uses llama-cpp-python + LangChain LlamaCpp to run a self‑hosted model.
 """
 import os, json, asyncio
 from langchain.llms import LlamaCpp
-from langchain import LLMChain, PromptTemplate
+from langchain.chains import LLMChain, PromptTemplate
 from langchain.memory import ConversationBufferMemory
 from sentinel.quick_scan import main as quick_scan
 from sentinel.anomaly_detector import score as is_anomaly

@@ -5,7 +5,7 @@ Usage:
   OPENAI_API_KEY=… python sentinel/agent.py
 """
 import os, json, asyncio, datetime
-from langchain import OpenAI, LLMChain, PromptTemplate
+from langchain.llms import OpenAI, LLMChain, PromptTemplate
 from langchain.memory import ConversationBufferMemory
 from sentinel.quick_scan import main as quick_scan
 from sentinel.anomaly_detector import score as is_anomaly
