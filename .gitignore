@@ -201,3 +201,10 @@ sentinel_logs/
 nano
 New
 cleaner.log
+
+# Vim swap files
+*.swp
+
+# Empty placeholders
+nano
+New
