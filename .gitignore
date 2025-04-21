@@ -190,3 +190,7 @@ cython_debug/
 *.crt
 
 
+
+# Ignore runtime log folders
+logs/
+sentinel_logs/
