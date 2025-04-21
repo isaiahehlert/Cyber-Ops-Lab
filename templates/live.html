@@ -1,0 +1,12 @@
+<!doctype html><meta charset=utf-8>
+<style>body{font-family:monospace;background:#111;color:#0f0;padding:1rem}
+span{display:block;white-space:pre}</style>
+<script>
+const ws=new WebSocket(`ws://${location.hostname}:8765`);
+ws.onmessage=e=>{
+  const s=document.createElement('span');
+  s.textContent=e.data;
+  document.body.prepend(s);
+  if(document.body.children.length>200)document.body.lastChild.remove();
+};
+</script>

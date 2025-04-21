@@ -1,4 +1,1 @@
-langchain>=0.0.168
-openai
-llama-cpp-python
-scapy
+# TODO: implement requirements.txt

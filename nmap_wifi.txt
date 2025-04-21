@@ -1,0 +1,4 @@
+# Nmap 7.80 scan initiated Mon Apr 21 16:58:34 2025 as: nmap -sn -oN nmap_wifi.txt 10.0.0.0/24
+Nmap scan report for 04e553b7-89ea-4368-a500-0c628e19e812.internal.cloudapp.net (10.0.0.202)
+Host is up (0.000077s latency).
+# Nmap done at Mon Apr 21 16:58:59 2025 -- 256 IP addresses (1 host up) scanned in 24.89 seconds
