@@ -1,4 +1,4 @@
-scapy
+langchain>=0.0.168
 openai
-langchain
-faiss-cpu
+llama-cpp-python
+scapy
