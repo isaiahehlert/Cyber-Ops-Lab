@@ -198,3 +198,5 @@ sentinel_logs/
 # Ignore editor swap/backup files
 *.swp
 *~
+nano
+New
