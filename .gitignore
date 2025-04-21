@@ -194,3 +194,7 @@ cython_debug/
 # Ignore runtime log folders
 logs/
 sentinel_logs/
+
+# Ignore editor swap/backup files
+*.swp
+*~
