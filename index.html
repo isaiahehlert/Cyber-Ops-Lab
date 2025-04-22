@@ -39,6 +39,7 @@
       border: 2px solid var(--primary-color);
       box-shadow: 0 0 20px var(--primary-color);
       display: block;
+      cursor: pointer;
     }
     .sentinel-btn {
       background-color: transparent;
@@ -116,7 +117,7 @@
   </div>
 
   <div class="dashboard">
-    <iframe src="https://example.com"></iframe> <!-- Replace with your dashboard link -->
+    <iframe src="https://example.com"></iframe>
   </div>
 
   <script>
@@ -159,6 +160,36 @@
     }
 
     window.onload = typeLine;
+
+    // ===== SECRET ADMIN PANEL SETUP =====
+    let logoClickCount = 0;
+    const logo = document.querySelector(".logo");
+
+    const adminPanel = document.createElement("div");
+    adminPanel.style.display = "none";
+    adminPanel.style.background = "#000";
+    adminPanel.style.color = "#0f0";
+    adminPanel.style.padding = "20px";
+    adminPanel.style.margin = "40px auto";
+    adminPanel.style.maxWidth = "900px";
+    adminPanel.style.fontFamily = "'Courier New', monospace";
+    adminPanel.style.border = "2px solid lime";
+    adminPanel.style.boxShadow = "0 0 15px lime";
+    adminPanel.innerHTML = `
+      <h3 style="margin-top:0;">Sentinel Admin Panel: LOG FEED</h3>
+      <div id="log-feed" style="max-height:300px; overflow-y:auto; background:#111; padding:10px; border:1px solid #0f0;">
+        [STANDBY] Waiting for network log stream...
+      </div>
+    `;
+
+    document.body.appendChild(adminPanel);
+
+    logo.addEventListener("click", () => {
+      logoClickCount++;
+      if (logoClickCount === 16) {
+        adminPanel.style.display = "block";
+      }
+    });
   </script>
 </body>
 </html>
