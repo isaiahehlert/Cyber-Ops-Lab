@@ -123,7 +123,7 @@
   <script>
     function getCurrentTime() {
       const now = new Date();
-      return now.toTimeString().split(' ')[0]; // Format: HH:MM:SS
+      return now.toTimeString().split(' ')[0];
     }
 
     const bootId = "BOOT_ID=Z3NT-" + Math.random().toString(36).substring(2, 6).toUpperCase()
@@ -188,6 +188,28 @@
       logoClickCount++;
       if (logoClickCount === 16) {
         adminPanel.style.display = "block";
+
+        const logFeed = document.getElementById("log-feed");
+        const socket = new WebSocket("ws://localhost:8080");
+
+        socket.addEventListener("message", function (event) {
+          const logLine = document.createElement("div");
+          logLine.textContent = event.data;
+          logFeed.appendChild(logLine);
+          logFeed.scrollTop = logFeed.scrollHeight;
+
+          // Trim log lines if over 100
+          const maxLines = 100;
+          while (logFeed.children.length > maxLines) {
+            logFeed.removeChild(logFeed.children[0]);
+          }
+        });
+
+        socket.addEventListener("error", function () {
+          const errorMsg = document.createElement("div");
+          errorMsg.textContent = "[ERROR] Log stream connection failed.";
+          logFeed.appendChild(errorMsg);
+        });
       }
     });
   </script>
