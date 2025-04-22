@@ -74,16 +74,30 @@
   </div>
 
   <script>
+    function getCurrentTime() {
+      const now = new Date();
+      return now.toTimeString().split(' ')[0]; // Format: HH:MM:SS
+    }
+
+    const bootId = "BOOT_ID=Z3NT-" + Math.random().toString(36).substring(2, 6).toUpperCase()
+                 + "-" + Math.random().toString(36).substring(2, 7).toUpperCase();
+
+    const bootTime = "BOOT_TIME=" + getCurrentTime();
+
     const lines = [
       ">> Project Sentinel v1.0 Initializing...",
       ">> Loading defense subroutines...",
       ">> Verifying MAC trace modules...",
       ">> Launching anomaly detection engine...",
+      `>> ${bootId}`,
+      `>> ${bootTime}`,
       ">> System integrity: OK",
       ">> All protocols green. Monitoring started."
     ];
+
     const output = document.getElementById("output");
     let index = 0, char = 0;
+
     function typeLine() {
       if (index < lines.length) {
         if (char < lines[index].length) {
@@ -98,6 +112,7 @@
         }
       }
     }
+
     window.onload = typeLine;
   </script>
 </body>
