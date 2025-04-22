@@ -17,9 +17,8 @@
       background-color: var(--bg-color);
       color: var(--primary-color);
       font-family: var(--font-mono);
-      display: block;
       overflow-y: auto;
-      padding-bottom: 80px;
+      position: relative;
     }
     .terminal {
       padding: 40px 20px;
@@ -27,13 +26,15 @@
       max-width: 900px;
       white-space: pre-wrap;
       line-height: 1.6;
+      position: relative;
+      z-index: 2;
     }
     .typewriter::after {
       content: '_';
       animation: blink 1s step-start infinite;
     }
     .logo {
-      margin: 20px auto 40px;
+      margin: 20px auto 30px;
       max-width: 320px;
       border: 2px solid var(--primary-color);
       box-shadow: 0 0 20px var(--primary-color);
@@ -55,12 +56,53 @@
       color: #000;
       box-shadow: 0 0 12px var(--primary-color);
     }
+    .dashboard {
+      margin: 40px auto;
+      width: 90%;
+      max-width: 900px;
+      border: 2px solid var(--primary-color);
+      height: 400px;
+      display: none;
+      z-index: 2;
+    }
+    iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #111;
+    }
+    .scanlines::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: repeating-linear-gradient(
+        rgba(0, 0, 0, 0.2) 0px,
+        rgba(0, 0, 0, 0.2) 2px,
+        transparent 2px,
+        transparent 4px
+      );
+      pointer-events: none;
+      z-index: 1;
+      mix-blend-mode: overlay;
+      animation: flicker 0.15s infinite alternate;
+    }
     @keyframes blink {
       50% { opacity: 0; }
     }
+    @keyframes flicker {
+      from { opacity: 0.9; }
+      to { opacity: 1; }
+    }
   </style>
 </head>
-<body>
+<body class="scanlines">
+  <audio autoplay hidden>
+    <source src="https://upload.wikimedia.org/wikipedia/commons/3/3b/Computer_Boot-up.ogg" type="audio/ogg">
+  </audio>
+
   <div class="terminal">
     <div class="typewriter" id="output"></div>
   </div>
@@ -68,9 +110,13 @@
   <img src="IMG_0202.jpeg" alt="Sentinel Logo" class="logo" />
 
   <div style="text-align: center;">
-    <button onclick="alert('Dashboard coming soon')" class="sentinel-btn">Enter Dashboard</button>
+    <button onclick="document.querySelector('.dashboard').style.display='block'" class="sentinel-btn">Enter Dashboard</button>
     <button onclick="alert('Logs not yet available')" class="sentinel-btn">View Logs</button>
     <button onclick="alert('Override feature locked')" class="sentinel-btn">Manual Override</button>
+  </div>
+
+  <div class="dashboard">
+    <iframe src="https://example.com"></iframe> <!-- Replace with your dashboard link -->
   </div>
 
   <script>
@@ -81,11 +127,10 @@
 
     const bootId = "BOOT_ID=Z3NT-" + Math.random().toString(36).substring(2, 6).toUpperCase()
                  + "-" + Math.random().toString(36).substring(2, 7).toUpperCase();
-
     const bootTime = "BOOT_TIME=" + getCurrentTime();
 
     const lines = [
-      ">> Project Sentinel v1.0 Initializing...",
+      ">> Project Sentinel v2.0 Initializing...",
       ">> Loading defense subroutines...",
       ">> Verifying MAC trace modules...",
       ">> Launching anomaly detection engine...",
