@@ -104,3 +104,5 @@ class NormalizedEvent(BaseModel):
             src=NetEndpoint(ip=src_ip, port=src_port) if (src_ip or src_port) else None,
             tags=tags or [],
         )
+#backwards-compat for tests/imports
+EventCore = Event
