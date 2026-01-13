@@ -1,78 +1,106 @@
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 class Host(BaseModel):
+    model_config = ConfigDict(extra="allow")
     name: str
     ip: str | None = None
 
 
 class Source(BaseModel):
+    model_config = ConfigDict(extra="allow")
     kind: str
     path: str | None = None
 
 
-Outcome = Literal["success", "failure", "unknown"]
-
-
-class EventCore(BaseModel):
+class Event(BaseModel):
+    model_config = ConfigDict(extra="allow")
     type: str
     action: str
-    outcome: Outcome
-    severity: int = Field(ge=1, le=10)
-
-
-class User(BaseModel):
-    name: str | None = None
-    uid: int | None = None
-
-
-class Endpoint(BaseModel):
-    ip: str | None = None
-    port: int | None = None
-    domain: str | None = None
-    geo: dict[str, Any] | None = None
-    asn: dict[str, Any] | None = None
-
-
-class Process(BaseModel):
-    name: str | None = None
-    pid: int | None = None
-    ppid: int | None = None
-    path: str | None = None
-    cmdline: str | None = None
+    outcome: Literal["success", "failure", "unknown"] = "unknown"
+    severity: int = 3
 
 
 class Raw(BaseModel):
+    model_config = ConfigDict(extra="allow")
     line: str
-    parser: str
+    parser: str | None = None
+
+
+class User(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    name: str | None = None
+    uid: str | None = None
+
+
+class NetEndpoint(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    ip: str | None = None
+    port: int | None = None
+    geo: dict[str, Any] | None = None  # {lat, lon, country, asn, ...}
 
 
 class NormalizedEvent(BaseModel):
-    model_config = ConfigDict(populate_by_name=True)
+    """
+    NormalizedEvent schema v1 for MiniSOC.
 
-    schema_id: Literal["minisoc.event.v1"] = Field(
-        default="minisoc.event.v1",
-        alias="schema",
-    )
+    NOTE:
+    - Internal field is schema_id, but JSON uses "schema" (alias) for compatibility.
+    """
+    model_config = ConfigDict(populate_by_name=True, extra="allow")
 
+    schema_id: str = Field(default="minisoc.event.v1", alias="schema")
+    ts: str  # RFC3339 string
     event_id: UUID = Field(default_factory=uuid4)
-    ts: str
+
     host: Host
     source: Source
-    event: EventCore
+    event: Event
+
     message: str
     raw: Raw
 
     user: User | None = None
-    src: Endpoint | None = None
-    dst: Endpoint | None = None
-    process: Process | None = None
+    src: NetEndpoint | None = None
 
     tags: list[str] = Field(default_factory=list)
-    labels: dict[str, str] = Field(default_factory=dict)
-    enrich: dict[str, Any] = Field(default_factory=dict)
+
+    @classmethod
+    def from_parts(
+        cls,
+        *,
+        ts: str,
+        host_name: str,
+        host_ip: str | None,
+        source_kind: str,
+        source_path: str,
+        event_type: str,
+        event_action: str,
+        outcome: str,
+        severity: int,
+        message: str,
+        raw_line: str,
+        parser: str,
+        user: str | None = None,
+        src_ip: str | None = None,
+        src_port: int | None = None,
+        tags: list[str] | None = None,
+    ) -> "NormalizedEvent":
+        return cls(
+            schema_id="minisoc.event.v1",
+            ts=ts,
+            host=Host(name=host_name, ip=host_ip),
+            source=Source(kind=source_kind, path=source_path),
+            event=Event(type=event_type, action=event_action, outcome=outcome, severity=severity),
+            message=message,
+            raw=Raw(line=raw_line, parser=parser),
+            user=User(name=user) if user else None,
+            src=NetEndpoint(ip=src_ip, port=src_port) if (src_ip or src_port) else None,
+            tags=tags or [],
+        )
