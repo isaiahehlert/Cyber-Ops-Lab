@@ -7,6 +7,7 @@ from pathlib import Path
 from fastapi import FastAPI
 
 from minisoc.common.schema import NormalizedEvent
+from minisoc.server.alerting.notifier import AlertOut, ConsoleNotifier, DedupeCache, Router
 from minisoc.server.detect.engine import DetectionEngine
 from minisoc.server.storage.sqlite import SQLiteStorage
 
@@ -18,9 +19,15 @@ def utc_now_rfc3339() -> str:
 def create_app(db_path: Path, jsonl_dir: Path) -> FastAPI:
     log = logging.getLogger("minisoc.server")
     app = FastAPI(title="MiniSOC Server", version="0.1.0")
+
     store = SQLiteStorage(db_path)
     store.init()
+
     engine = DetectionEngine()
+
+    # Dedupe persists across restarts (simple text file in jsonl_dir)
+    dedupe_path = jsonl_dir / "seen_alert_ids.txt"
+    router = Router(ConsoleNotifier(), dedupe=DedupeCache(dedupe_path, ttl_minutes=60))
 
     jsonl_dir.mkdir(parents=True, exist_ok=True)
     jsonl_path = jsonl_dir / "events.jsonl"
@@ -36,11 +43,24 @@ def create_app(db_path: Path, jsonl_dir: Path) -> FastAPI:
         with jsonl_path.open("a", encoding="utf-8") as f:
             f.write(ev.model_dump_json(by_alias=True) + "\n")
 
-        # detect + alert
         alert_count = 0
         for det in engine.process(ev):
-            store.insert_alert(engine.to_alert(det, ts=ev.ts))
+            alert = engine.to_alert(det, ts=ev.ts)
+            store.insert_alert(alert)
             alert_count += 1
+
+            router.route(
+                AlertOut(
+                    alert_id=alert.alert_id,
+                    ts=alert.ts,
+                    rule_id=alert.rule_id,
+                    title=alert.title,
+                    severity=alert.severity,
+                    entity=alert.entity,
+                    event_ids=alert.event_ids,
+                    details=alert.details,
+                )
+            )
 
         log.info(
             "ingested event_id=%s type=%s action=%s alerts=%d",
