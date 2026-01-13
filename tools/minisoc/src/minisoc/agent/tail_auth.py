@@ -1,10 +1,14 @@
 from __future__ import annotations
 
+import json
 import logging
 import re
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Literal
+from uuid import uuid4
 
 import httpx
 
@@ -14,8 +18,15 @@ from minisoc.common.schema import NormalizedEvent
 
 log = logging.getLogger("minisoc.agent")
 
+Mode = Literal["live", "replay"]
+SourcePref = Literal["auto", "file", "journal"]
+
 SSH_FAIL = re.compile(r"Failed password for (?P<user>\S+) from (?P<ip>\d+\.\d+\.\d+\.\d+) port (?P<port>\d+)")
 SSH_OK = re.compile(r"Accepted \S+ for (?P<user>\S+) from (?P<ip>\d+\.\d+\.\d+\.\d+) port (?P<port>\d+)")
+
+
+def utc_now_rfc3339() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 @dataclass(frozen=True)
@@ -26,49 +37,44 @@ class TailStats:
     failed: int = 0
 
 
-def utc_now_rfc3339() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
 def parse_sshd_line(line: str, *, host: str, host_ip: str | None, source_path: str) -> NormalizedEvent | None:
-    m_fail = SSH_FAIL.search(line)
-    m_ok = SSH_OK.search(line)
+    m = SSH_FAIL.search(line)
+    outcome = None
+    sev = None
+    if m:
+        outcome = "failure"
+        sev = 4
+    else:
+        m = SSH_OK.search(line)
+        if m:
+            outcome = "success"
+            sev = 3
 
-    if not (m_fail or m_ok):
+    if not m:
         return None
-
-    outcome = "failure" if m_fail else "success"
-    m = m_fail or m_ok
-    assert m is not None
 
     user = m.group("user")
     ip = m.group("ip")
     port = int(m.group("port"))
 
-    msg = f"SSH login {outcome} for user={user} from {ip}"
-
-    return NormalizedEvent.from_parts(
+    ev = NormalizedEvent(
+        schema="minisoc.event.v1",
         ts=utc_now_rfc3339(),
-        host_name=host,
-        host_ip=host_ip,
-        source_kind="auth",
-        source_path=source_path,
-        event_type="auth",
-        action="ssh_login",
-        outcome=outcome,
-        severity=4 if outcome == "failure" else 3,
-        message=msg,
-        raw_line=line,
-        raw_parser="auth.sshd",
-        user=user,
-        src_ip=ip,
-        src_port=port,
+        event_id=uuid4(),
+        host={"name": host, "ip": host_ip},
+        source={"kind": "auth", "path": source_path},
+        event={"type": "auth", "action": "ssh_login", "outcome": outcome, "severity": sev},
+        message=f"SSH login {outcome} for user={user} from {ip}",
+        raw={"line": line, "parser": "auth.sshd"},
+        user={"name": user, "uid": None},
+        src={"ip": ip, "port": port, "geo": None},
         tags=["ssh", "auth", outcome],
     )
+    return ev
 
 
 def send_event(client: httpx.Client, server_url: str, ev: NormalizedEvent) -> None:
-    # mode="json" converts UUID -> str, etc.
+    # IMPORTANT: ensure UUID/datetime become JSON-safe
     payload = ev.model_dump(mode="json", by_alias=True)
     r = client.post(f"{server_url.rstrip('/')}/ingest", json=payload)
     r.raise_for_status()
@@ -81,51 +87,70 @@ def run_tail_auth(
     host: str,
     host_ip: str | None,
     dry_run: bool,
-    source: str = "auto",      # auto|file|journal
-    from_start: bool = False,
+    mode: Mode,
+    from_start_live: bool,
+    source: SourcePref = "auto",
+    heartbeat_s: float | None = 30.0,
 ) -> TailStats:
+    """
+    live: follow forever
+    replay: read once then exit
+    """
     stats = TailStats()
-    decision = pick_auth_source(preferred_path=log_path)
+    decision = pick_auth_source(log_path, prefer=source)
 
-    if source == "auto":
-        src_kind = decision.kind
-        src_path = str(decision.path) if decision.path else "journald:sshd"
-        log.info("auth source auto: kind=%s reason=%s", decision.kind, decision.reason)
-    elif source == "file":
-        src_kind = "file"
-        src_path = str(log_path)
-        log.info("auth source forced: file path=%s", log_path)
-    elif source == "journal":
-        src_kind = "journal"
-        src_path = "journald:sshd"
-        log.info("auth source forced: journald (sshd)")
-    else:
-        raise ValueError("source must be one of: auto, file, journal")
+    # banner: what we picked and why
+    log.info(
+        "agent source selected: kind=%s path=%s reason=%s",
+        decision.kind,
+        str(decision.path) if decision.path else "-",
+        decision.reason,
+    )
+    if decision.kind == "file" and (decision.path is None or not decision.path.exists()):
+        log.warning("auth file missing/unreadable; if this is a container, use source=journal (or auto fallback).")
 
-    if src_kind == "file":
-        iterator = follow_file(Path(src_path), from_start=from_start)
+    # iterator selection
+    if decision.kind == "journal":
+        iterator = follow_journal_sshd(from_start=(mode == "replay"))
+        source_path = "journald:sshd"
     else:
-        iterator = follow_journal_sshd(from_start=from_start)
+        # file mode
+        p = decision.path or log_path
+        iterator = follow_file(p, from_start=(mode == "replay") or from_start_live)
+        source_path = str(p)
+
+    last_beat = time.monotonic()
+    beat_enabled = heartbeat_s is not None and heartbeat_s > 0
 
     with httpx.Client(timeout=5.0) as client:
         for line in iterator:
             stats = TailStats(read=stats.read + 1, parsed=stats.parsed, sent=stats.sent, failed=stats.failed)
 
-            ev = parse_sshd_line(line, host=host, host_ip=host_ip, source_path=src_path)
-            if not ev:
-                continue
+            ev = parse_sshd_line(line, host=host, host_ip=host_ip, source_path=source_path)
+            if ev:
+                stats = TailStats(read=stats.read, parsed=stats.parsed + 1, sent=stats.sent, failed=stats.failed)
 
-            stats = TailStats(read=stats.read, parsed=stats.parsed + 1, sent=stats.sent, failed=stats.failed)
+                if dry_run:
+                    print(json.dumps(ev.model_dump(mode="json", by_alias=True)))
+                else:
+                    try:
+                        send_event(client, server_url, ev)
+                        stats = TailStats(read=stats.read, parsed=stats.parsed, sent=stats.sent + 1, failed=stats.failed)
+                    except Exception:
+                        log.exception("send failed: server=%s", server_url)
+                        stats = TailStats(read=stats.read, parsed=stats.parsed, sent=stats.sent, failed=stats.failed + 1)
 
-            if dry_run:
-                print(ev.model_dump_json(by_alias=True))
-                continue
+            if beat_enabled and mode == "live":
+                now = time.monotonic()
+                if now - last_beat >= float(heartbeat_s):
+                    log.info("agent heartbeat: read=%d parsed=%d sent=%d failed=%d", stats.read, stats.parsed, stats.sent, stats.failed)
+                    last_beat = now
 
-            try:
-                send_event(client, server_url, ev)
-                stats = TailStats(read=stats.read, parsed=stats.parsed, sent=stats.sent + 1, failed=stats.failed)
-            except Exception:
-                log.exception("send failed: server=%s", server_url)
-                stats = TailStats(read=stats.read, parsed=stats.parsed, sent=stats.sent, failed=stats.failed + 1)
+            if mode == "replay":
+                # replay mode ends when file iterator ends; journal iterator doesn't naturally end,
+                # so we require file-based replay or user uses --from-start + live if they want.
+                # Here we only exit if we've hit EOF semantics via follow_file (not possible to detect here),
+                # so replay is primarily intended for file sources.
+                pass
 
     return stats

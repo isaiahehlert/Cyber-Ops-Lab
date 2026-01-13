@@ -5,7 +5,7 @@ import subprocess
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterator, Literal, Sequence
+from typing import Iterator, Literal
 
 
 SourceKind = Literal["file", "journal"]
@@ -19,99 +19,108 @@ class AutoSourceDecision:
 
 
 DEFAULT_AUTH_PATH_CANDIDATES: tuple[Path, ...] = (
-    Path("/var/log/auth.log"),     # Debian/Ubuntu/RPi OS (often)
+    Path("/var/log/auth.log"),     # Debian/Ubuntu/RPi OS
     Path("/var/log/secure"),       # RHEL/CentOS/Fedora
     Path("/var/log/messages"),     # some syslog setups
 )
 
 
+def _is_readable_file(p: Path) -> bool:
+    try:
+        return p.exists() and p.is_file() and os.access(p, os.R_OK)
+    except Exception:
+        return False
+
+
+def journalctl_available() -> bool:
+    # fast, cheap capability probe
+    try:
+        r = subprocess.run(
+            ["journalctl", "--version"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return r.returncode == 0
+    except Exception:
+        return False
+
+
 def pick_auth_source(
-    *,
-    preferred_path: Path | None = None,
-    candidates: Sequence[Path] = DEFAULT_AUTH_PATH_CANDIDATES,
+    requested_path: Path | None,
+    prefer: SourceKind | Literal["auto"] = "auto",
 ) -> AutoSourceDecision:
-    if preferred_path and preferred_path.exists():
-        return AutoSourceDecision(kind="file", reason=f"preferred path exists: {preferred_path}", path=preferred_path)
+    """
+    Decide where to read sshd/auth events from.
 
-    for p in candidates:
-        if p.exists():
-            return AutoSourceDecision(kind="file", reason=f"found log file: {p}", path=p)
+    Rules:
+    - If prefer="file": use requested_path (or first candidate) if readable, else error (no journald fallback).
+    - If prefer="journal": use journald if available, else error.
+    - If prefer="auto": try file first, then fall back to journald if no readable file exists.
+    """
+    # Resolve file target if any
+    file_target: Path | None = requested_path
+    if file_target is None:
+        for c in DEFAULT_AUTH_PATH_CANDIDATES:
+            if _is_readable_file(c):
+                file_target = c
+                break
 
-    if _has_journalctl():
-        return AutoSourceDecision(kind="journal", reason="no auth files found; journalctl available", path=None)
+    if prefer == "file":
+        if file_target and _is_readable_file(file_target):
+            return AutoSourceDecision("file", "prefer=file and path readable", path=file_target)
+        return AutoSourceDecision("file", "prefer=file but no readable auth log path found", path=file_target)
+
+    if prefer == "journal":
+        if journalctl_available():
+            return AutoSourceDecision("journal", "prefer=journal and journalctl available", path=None)
+        return AutoSourceDecision("journal", "prefer=journal but journalctl not available", path=None)
+
+    # auto
+    if file_target and _is_readable_file(file_target):
+        return AutoSourceDecision("file", "auto picked readable auth log file", path=file_target)
+
+    if journalctl_available():
+        return AutoSourceDecision("journal", "auto fell back to journald (no readable auth log file)", path=None)
 
     return AutoSourceDecision(
-        kind="file",
-        reason="no auth files found and journalctl missing; using preferred/default",
-        path=preferred_path or candidates[0],
+        "file",
+        "auto failed: no readable auth log file and journalctl unavailable",
+        path=file_target,
     )
-
-
-def _has_journalctl() -> bool:
-    try:
-        r = subprocess.run(["journalctl", "--version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
-        return r.returncode == 0
-    except FileNotFoundError:
-        return False
 
 
 def follow_file(path: Path, *, from_start: bool, sleep_s: float = 0.2) -> Iterator[str]:
     """
-    Tail -f a file without external deps, rotation-safe.
-    Reopens file if inode changes (log rotation).
+    Tail -f a file with no deps.
+    - from_start=False: start at end (live mode)
+    - from_start=True: start at beginning (replay/lab mode)
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    def _open():
-        f = path.open("r", encoding="utf-8", errors="replace")
-        st = os.fstat(f.fileno())
-        inode = getattr(st, "st_ino", None)
-        return f, inode
-
-    f, inode = _open()
-    try:
+    with path.open("r", encoding="utf-8", errors="replace") as f:
         if not from_start:
             f.seek(0, 2)
-
         while True:
             line = f.readline()
-            if line:
-                yield line.rstrip("\n")
+            if not line:
+                time.sleep(sleep_s)
                 continue
-
-            # No new data; check rotation.
-            try:
-                st_now = path.stat()
-                inode_now = getattr(st_now, "st_ino", None)
-                if inode is not None and inode_now is not None and inode_now != inode:
-                    f.close()
-                    f, inode = _open()
-                    if not from_start:
-                        f.seek(0, 2)
-            except FileNotFoundError:
-                pass
-
-            time.sleep(sleep_s)
-    finally:
-        try:
-            f.close()
-        except Exception:
-            pass
+            yield line.rstrip("\n")
 
 
 def follow_journal_sshd(*, from_start: bool) -> Iterator[str]:
     """
-    Follow sshd messages via journald using `journalctl -f`.
+    Follow sshd lines via journald.
+
+    from_start=False: follow new messages
+    from_start=True: replay available history (can be large on real boxes)
     """
-    args = ["journalctl", "-o", "short-iso"]
-    if not from_start:
-        args += ["-n", "0"]
-    args += ["-f", "_COMM=sshd"]
-
-    proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-
-    assert proc.stdout is not None
-    for raw in proc.stdout:
-        s = raw.rstrip("\n")
-        if s:
-            yield s
+    args = ["journalctl", "-f", "-o", "cat"]
+    if from_start:
+        # no -f history-only mode would exit; we want history + follow
+        args = ["journalctl", "-o", "cat", "-f"]
+    # Filter to sshd-ish lines. We avoid unit names because distro differs.
+    p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    assert p.stdout is not None
+    for line in p.stdout:
+        if "sshd" in line:
+            yield line.rstrip("\n")

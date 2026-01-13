@@ -5,6 +5,7 @@ from pathlib import Path
 
 import typer
 import uvicorn
+import httpx
 
 from minisoc.common.config import load_config
 from minisoc.common.log import setup_logging
@@ -91,24 +92,32 @@ def replay(
 @app.command("agent-tail-auth")
 def agent_tail_auth(
     config: Path = typer.Option(Path("configs/agent.example.yaml"), "--config", "-c"),
-    log_path: Path = typer.Option(Path("/var/log/auth.log"), "--log-path"),
+    log_path: str = typer.Option("auto", "--log-path", help="Path to auth log file, or 'auto'"),
     host: str = typer.Option("lab-host", "--host"),
     host_ip: str | None = typer.Option(None, "--host-ip"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-    mode: str = typer.Option("live", "--mode", help="live (tail -f) or replay (read file once)"),
+    mode: str = typer.Option("live", "--mode", help="live (tail) or replay (read from-start/testing)"),
     from_start: bool = typer.Option(False, "--from-start", help="For live mode: start reading at beginning (lab/testing)"),
+    source: str = typer.Option("auto", "--source", help="auto|file|journal"),
+    heartbeat_s: float = typer.Option(30.0, "--heartbeat-s", help="Seconds between heartbeat logs (0 disables)"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
 ) -> None:
     cfg = load_config(config)
     setup_logging(cfg.logging, name="minisoc-agent")
-    run_tail_auth(
+
+    lp = Path("/var/log/auth.log") if log_path.strip().lower() == "auto" else Path(log_path)
+
+    stats = run_tail_auth(
         server_url=cfg.agent.server_url,
-        log_path=log_path,
+        log_path=lp,
         host=host,
         host_ip=host_ip,
         dry_run=dry_run,
-        mode=mode,
+        mode=mode,  # type: ignore[arg-type]
         from_start_live=from_start,
+        source=source,  # type: ignore[arg-type]
+        heartbeat_s=(None if heartbeat_s <= 0 else heartbeat_s),
     )
+    print(f"agent: mode={mode} read={stats.read} parsed={stats.parsed} sent={stats.sent} failed={stats.failed}")
 
 
 
@@ -132,6 +141,70 @@ def doctor(
     else:
         print("  journald:           enabled (journalctl)")
         print("  tip: journald may require sudo or systemd-journal group")
+
+
+
+@app.command("agent-tail-auth")
+def agent_tail_auth(
+    config: Path = typer.Option(Path("configs/agent.example.yaml"), "--config", "-c"),
+    log_path: str = typer.Option("auto", "--log-path", help="Path to auth log file, or 'auto'"),
+    host: str = typer.Option("lab-host", "--host"),
+    host_ip: str | None = typer.Option(None, "--host-ip"),
+    mode: str = typer.Option("live", "--mode", help="live (tail) or replay (read from-start/testing)"),
+    from_start: bool = typer.Option(False, "--from-start", help="For live mode: start reading at beginning (lab/testing)"),
+    source: str = typer.Option("auto", "--source", help="auto|file|journal"),
+    heartbeat_s: float = typer.Option(30.0, "--heartbeat-s", help="Seconds between heartbeat logs (0 disables)"),
+    dry_run: bool = typer.Option(False, "--dry-run"),
+) -> None:
+    cfg = load_config(config)
+    setup_logging(cfg.logging, name="minisoc-agent")
+
+    lp = Path("/var/log/auth.log") if log_path.strip().lower() == "auto" else Path(log_path)
+
+    stats = run_tail_auth(
+        server_url=cfg.agent.server_url,
+        log_path=lp,
+        host=host,
+        host_ip=host_ip,
+        dry_run=dry_run,
+        mode=mode,  # type: ignore[arg-type]
+        from_start_live=from_start,
+        source=source,  # type: ignore[arg-type]
+        heartbeat_s=(None if heartbeat_s <= 0 else heartbeat_s),
+    )
+    print(f"agent: mode={mode} read={stats.read} parsed={stats.parsed} sent={stats.sent} failed={stats.failed}")
+
+
+
+@app.command()
+def doctor(config: Path = typer.Option(Path("configs/agent.example.yaml"), "--config", "-c")) -> None:
+    """
+    Quick sanity checks for live deployment.
+    """
+    cfg = load_config(config)
+    print("=== minisoc doctor ===")
+    print(f"server_url: {cfg.agent.server_url}")
+
+    # Server health check
+    try:
+        r = httpx.get(f"{cfg.agent.server_url.rstrip('/')}/health", timeout=2.0)
+        print(f"server /health: {r.status_code} {r.text.strip()[:200]}")
+    except Exception as e:
+        print(f"server /health: FAILED ({type(e).__name__}: {e})")
+
+    # Auth source decision
+    decision = pick_auth_source(None, prefer="auto")
+    print(f"auth source decision: kind={decision.kind} reason={decision.reason} path={decision.path}")
+
+    # Candidate file checks (informational)
+    from minisoc.agent.sources import DEFAULT_AUTH_PATH_CANDIDATES
+    import os, shutil
+    for c in DEFAULT_AUTH_PATH_CANDIDATES:
+        readable = c.exists() and c.is_file() and os.access(c, os.R_OK)
+        print(f"candidate: {c} exists={c.exists()} readable={readable}")
+
+    print(f"journalctl available: {shutil.which('journalctl') is not None}")
+    print("=== end ===")
 
 
 if __name__ == "__main__":
