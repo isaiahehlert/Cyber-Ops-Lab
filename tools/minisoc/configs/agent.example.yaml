@@ -1,0 +1,10 @@
+logging:
+  level: INFO
+  dir: ./var/log
+agent:
+  host_name: localhost
+  tail_paths:
+    - /var/log/auth.log
+    - /var/log/syslog
+  server_url: http://127.0.0.1:8080
+  poll_interval_s: 0.5

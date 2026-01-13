@@ -1,0 +1,8 @@
+logging:
+  level: INFO
+  dir: ./var/log
+server:
+  bind_host: 127.0.0.1
+  bind_port: 8080
+  db_path: ./var/minisoc.db
+  jsonl_dir: ./var/jsonl
