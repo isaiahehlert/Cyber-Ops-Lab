@@ -13,7 +13,7 @@ log = logging.getLogger("minisoc.alerting")
 @dataclass(frozen=True)
 class AlertOut:
     alert_id: str
-    ts: str
+    ts: str  # event time (what we display)
     rule_id: str
     title: str
     severity: int
@@ -29,9 +29,7 @@ class Notifier(Protocol):
 class ConsoleNotifier:
     def notify(self, alert: AlertOut, suppressed_repeats: int = 0) -> None:
         extra = f" (+{suppressed_repeats} suppressed repeats)" if suppressed_repeats > 0 else ""
-        print(
-            f"[ALERT] {alert.ts} {alert.rule_id} sev={alert.severity} {alert.entity} :: {alert.title}{extra}"
-        )
+        print(f"[ALERT] {alert.ts} {alert.rule_id} sev={alert.severity} {alert.entity} :: {alert.title}{extra}")
         if alert.details:
             print("        details:", json.dumps(alert.details, sort_keys=True))
 
@@ -42,10 +40,15 @@ def _parse_ts(ts: str) -> datetime:
     return datetime.fromisoformat(ts).astimezone(timezone.utc)
 
 
+def _now_rfc3339() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 class DedupeCache:
     """
-    Persisted dedupe with TTL.
-    File format: one entry per line -> alert_id|ts
+    Persisted dedupe with TTL based on *seen time* (when we emitted/routed the alert),
+    not event time. This is crucial for delayed logs and replay labs.
+    File format: alert_id|seen_ts
     """
     def __init__(self, path: Path, ttl_minutes: int = 60) -> None:
         self.path = path
@@ -56,7 +59,7 @@ class DedupeCache:
 
     def _load_and_prune(self) -> None:
         now = datetime.now(timezone.utc)
-        lines: list[str] = self.path.read_text(encoding="utf-8").splitlines() if self.path.exists() else []
+        lines = self.path.read_text(encoding="utf-8").splitlines() if self.path.exists() else []
 
         for line in lines:
             line = line.strip()
@@ -72,17 +75,19 @@ class DedupeCache:
                 self._seen[aid] = now
 
         self._prune()
+        self._rewrite()
 
+    def _rewrite(self) -> None:
         with self.path.open("w", encoding="utf-8") as f:
-            for aid, ts in self._seen.items():
-                f.write(f"{aid}|{ts.isoformat().replace('+00:00','Z')}\n")
+            for aid, seen_dt in self._seen.items():
+                f.write(f"{aid}|{seen_dt.isoformat().replace('+00:00','Z')}\n")
 
     def _prune(self) -> None:
         if self.ttl.total_seconds() <= 0:
             self._seen.clear()
             return
         cutoff = datetime.now(timezone.utc) - self.ttl
-        self._seen = {aid: ts for aid, ts in self._seen.items() if ts >= cutoff}
+        self._seen = {aid: dt for aid, dt in self._seen.items() if dt >= cutoff}
 
     def seen(self, alert_id: str) -> bool:
         if self.ttl.total_seconds() <= 0:
@@ -90,42 +95,36 @@ class DedupeCache:
         self._prune()
         return alert_id in self._seen
 
-    def mark(self, alert_id: str, ts: str) -> None:
+    def mark_seen_now(self, alert_id: str) -> None:
         if self.ttl.total_seconds() <= 0:
             return
-        dt = _parse_ts(ts)
-        self._seen[alert_id] = dt
-        with self.path.open("a", encoding="utf-8") as f:
-            f.write(f"{alert_id}|{ts}\n")
+        self._seen[alert_id] = datetime.now(timezone.utc)
+        self._rewrite()
 
 
 class Router:
     """
-    Routes alerts to a notifier, with dedupe and a running "suppressed repeats" counter.
+    Routes alerts with dedupe + suppressed-repeat counting.
 
-    Behavior:
-    - If dedupe suppresses an alert_id, increment a counter for that alert_id.
-    - Next time that alert_id is allowed through, include (+N suppressed repeats) in output.
+    - If dedupe suppresses an alert_id, increment suppressed counter.
+    - When it emits again (after TTL), it prints (+N suppressed repeats).
     """
     def __init__(self, notifier: Notifier, dedupe: DedupeCache | None = None) -> None:
         self.notifier = notifier
         self.dedupe = dedupe
-        self._suppressed: dict[str, int] = {}  # alert_id -> suppressed count
+        self._suppressed: dict[str, int] = {}
 
     def route(self, alert: AlertOut) -> None:
         if self.dedupe and self.dedupe.seen(alert.alert_id):
             self._suppressed[alert.alert_id] = self._suppressed.get(alert.alert_id, 0) + 1
-            # Optional: occasionally log suppression counts without spamming console
-            if self._suppressed[alert.alert_id] in (10, 25, 50, 100):
-                log.info(
-                    "dedupe: alert_id=%s suppressed=%d",
-                    alert.alert_id,
-                    self._suppressed[alert.alert_id],
-                )
+            n = self._suppressed[alert.alert_id]
+            if n in (10, 25, 50, 100):
+                log.info("dedupe: alert_id=%s suppressed=%d", alert.alert_id, n)
             return
 
-        suppressed_repeats = self._suppressed.pop(alert.alert_id, 0)
-        self.notifier.notify(alert, suppressed_repeats=suppressed_repeats)
+        suppressed = self._suppressed.pop(alert.alert_id, 0)
+        self.notifier.notify(alert, suppressed_repeats=suppressed)
 
         if self.dedupe:
-            self.dedupe.mark(alert.alert_id, ts=alert.ts)
+            # IMPORTANT: mark seen by *now*, not by alert.ts (event time)
+            self.dedupe.mark_seen_now(alert.alert_id)
