@@ -3,7 +3,7 @@ from __future__ import annotations
 from typing import Any, Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Host(BaseModel):
@@ -53,7 +53,13 @@ class Raw(BaseModel):
 
 
 class NormalizedEvent(BaseModel):
-    schema: Literal["minisoc.event.v1"] = "minisoc.event.v1"
+    model_config = ConfigDict(populate_by_name=True)
+
+    schema_id: Literal["minisoc.event.v1"] = Field(
+        default="minisoc.event.v1",
+        alias="schema",
+    )
+
     event_id: UUID = Field(default_factory=uuid4)
     ts: str
     host: Host
