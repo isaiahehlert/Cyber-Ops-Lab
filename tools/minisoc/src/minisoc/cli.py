@@ -10,6 +10,7 @@ from minisoc.common.config import load_config
 from minisoc.common.log import setup_logging
 from minisoc.replay import replay_scenario
 from minisoc.agent.tail_auth import run_tail_auth
+from minisoc.agent.sources import pick_auth_source
 from minisoc.server.api import create_app
 
 app = typer.Typer(help="MiniSOC: Pi-friendly Home SOC / Mini-SIEM")
@@ -108,6 +109,29 @@ def agent_tail_auth(
         mode=mode,
         from_start_live=from_start,
     )
+
+
+
+@app.command()
+def doctor(
+    log_path: Path = typer.Option(Path("/var/log/auth.log"), "--log-path"),
+) -> None:
+    decision = pick_auth_source(preferred_path=log_path)
+    print("MiniSOC doctor")
+    print(f"  preferred log path: {log_path}")
+    print(f"  auto decision:      {decision.kind} ({decision.reason})")
+    if decision.path:
+        print(f"  chosen file path:   {decision.path}")
+        print(f"  exists:             {decision.path.exists()}")
+        try:
+            with decision.path.open("r", encoding="utf-8", errors="replace") as f:
+                _ = f.readline()
+            print("  readable:           yes")
+        except Exception as e:
+            print(f"  readable:           no ({type(e).__name__}: {e})")
+    else:
+        print("  journald:           enabled (journalctl)")
+        print("  tip: journald may require sudo or systemd-journal group")
 
 
 if __name__ == "__main__":
