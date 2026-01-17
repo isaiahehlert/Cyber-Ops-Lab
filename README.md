@@ -13,26 +13,23 @@ A repository of customized tools, logs, and documentation used in cybersecurity 
 Project under active development. Tools and references are being added progressively.
 ---
 
-## 🔍 Tools
+## 🧰 Current Toolset
 
-### `dns_lookup.py`
-Resolves domain names to IP addresses using Python’s `socket` module.
+### `minisoc/` — Minimal SOC Simulator  
+A self-contained detection lab framework designed for simulating alert workflows, replaying attack scenarios, and testing detection logic.
 
-- **Usage:**  
-  Run in terminal → `python3 scripts/dns_lookup.py`
-- **Example Input:** `openai.com`  
-- **Example Output:** `[+] openai.com resolves to 104.18.30.5`
-- **Dependencies:** None
+**Features:**
+- 🧪 Agent/server model for replaying telemetry
+- ⚙️ Configurable replay scenarios (JSONL)
+- 🔎 Example detections (impossible travel, password spray, SSH brute-force)
+- 🧼 Clean Python CLI interface via `cli.py`
+- 🧪 Test coverage in `tests/`
+- 🐍 Built with `pyproject.toml` (PEP 518-style)
 
----
+**Paths:**
+- `tools/minisoc/configs/` — Example configs
+- `tools/minisoc/data/replay_scenarios/` — JSONL attack flows
+- `tools/minisoc/src/minisoc/` — Agent, server, CLI logic
+- `tools/minisoc/tests/` — Unit tests for detection + storage
 
-### `port_scanner.py`
-Scans a given IP for open TCP ports in a specified range using multi-threading.
-
-- **Usage:**  
-  Run in terminal → `python3 scripts/port_scanner.py`
-- **Example Input:**  
-  IP: `127.0.0.1`  
-  Ports: `20 to 100`
-- **Example Output:** `[+] Port 22 is OPEN`
-- **Dependencies:** None
+> See the [`tools/minisoc/README.md`](./tools/minisoc/README.md) for more information.
