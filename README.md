@@ -1,7 +1,6 @@
 # 🛡️ Cyber-Ops-Lab
-![Sentient Sentinel Shield](assets/full_color.jpeg)
 
-A private repository of tools, logs, and documentation used in cybersecurity research, testing, and learning.
+A repository of customized tools, logs, and documentation used in cybersecurity research, testing, and learning.
 
 ## 📁 Directories
 
