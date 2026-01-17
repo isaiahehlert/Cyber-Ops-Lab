@@ -91,6 +91,7 @@ def replay(
 
 @app.command("agent-tail-auth")
 def agent_tail_auth(
+
     config: Path = typer.Option(Path("configs/agent.example.yaml"), "--config", "-c"),
     log_path: str = typer.Option("auto", "--log-path", help="Path to auth log file, or 'auto'"),
     host: str = typer.Option("lab-host", "--host"),
@@ -100,6 +101,10 @@ def agent_tail_auth(
     source: str = typer.Option("auto", "--source", help="auto|file|journal"),
     heartbeat_s: float = typer.Option(30.0, "--heartbeat-s", help="Seconds between heartbeat logs (0 disables)"),
     dry_run: bool = typer.Option(False, "--dry-run"),
+    suspicious_log: Path = typer.Option(Path("var/log/minisoc-suspicious.jsonl"), "--suspicious-log", help="Permanent suspicious-only JSONL log"),
+    bruteforce_window_s: int = typer.Option(60, "--bf-window-s", help="Local brute-force window (seconds)"),
+    bruteforce_threshold: int = typer.Option(5, "--bf-threshold", help="Local brute-force threshold (failures/window)"),
+    bruteforce_cooldown_s: int = typer.Option(60, "--bf-cooldown-s", help="Cooldown between suspicious log emits (seconds)"),
 ) -> None:
     cfg = load_config(config)
     setup_logging(cfg.logging, name="minisoc-agent")
@@ -107,7 +112,7 @@ def agent_tail_auth(
     lp = Path("/var/log/auth.log") if log_path.strip().lower() == "auto" else Path(log_path)
 
     stats = run_tail_auth(
-        server_url=cfg.agent.server_url,
+server_url=cfg.agent.server_url,
         log_path=lp,
         host=host,
         host_ip=host_ip,
@@ -116,61 +121,10 @@ def agent_tail_auth(
         from_start_live=from_start,
         source=source,  # type: ignore[arg-type]
         heartbeat_s=(None if heartbeat_s <= 0 else heartbeat_s),
-    )
-    print(f"agent: mode={mode} read={stats.read} parsed={stats.parsed} sent={stats.sent} failed={stats.failed}")
-
-
-
-@app.command()
-def doctor(
-    log_path: Path = typer.Option(Path("/var/log/auth.log"), "--log-path"),
-) -> None:
-    decision = pick_auth_source(preferred_path=log_path)
-    print("MiniSOC doctor")
-    print(f"  preferred log path: {log_path}")
-    print(f"  auto decision:      {decision.kind} ({decision.reason})")
-    if decision.path:
-        print(f"  chosen file path:   {decision.path}")
-        print(f"  exists:             {decision.path.exists()}")
-        try:
-            with decision.path.open("r", encoding="utf-8", errors="replace") as f:
-                _ = f.readline()
-            print("  readable:           yes")
-        except Exception as e:
-            print(f"  readable:           no ({type(e).__name__}: {e})")
-    else:
-        print("  journald:           enabled (journalctl)")
-        print("  tip: journald may require sudo or systemd-journal group")
-
-
-
-@app.command("agent-tail-auth")
-def agent_tail_auth(
-    config: Path = typer.Option(Path("configs/agent.example.yaml"), "--config", "-c"),
-    log_path: str = typer.Option("auto", "--log-path", help="Path to auth log file, or 'auto'"),
-    host: str = typer.Option("lab-host", "--host"),
-    host_ip: str | None = typer.Option(None, "--host-ip"),
-    mode: str = typer.Option("live", "--mode", help="live (tail) or replay (read from-start/testing)"),
-    from_start: bool = typer.Option(False, "--from-start", help="For live mode: start reading at beginning (lab/testing)"),
-    source: str = typer.Option("auto", "--source", help="auto|file|journal"),
-    heartbeat_s: float = typer.Option(30.0, "--heartbeat-s", help="Seconds between heartbeat logs (0 disables)"),
-    dry_run: bool = typer.Option(False, "--dry-run"),
-) -> None:
-    cfg = load_config(config)
-    setup_logging(cfg.logging, name="minisoc-agent")
-
-    lp = Path("/var/log/auth.log") if log_path.strip().lower() == "auto" else Path(log_path)
-
-    stats = run_tail_auth(
-        server_url=cfg.agent.server_url,
-        log_path=lp,
-        host=host,
-        host_ip=host_ip,
-        dry_run=dry_run,
-        mode=mode,  # type: ignore[arg-type]
-        from_start_live=from_start,
-        source=source,  # type: ignore[arg-type]
-        heartbeat_s=(None if heartbeat_s <= 0 else heartbeat_s),
+        suspicious_log_path=suspicious_log,
+        local_bruteforce_window_s=bruteforce_window_s,
+        local_bruteforce_threshold=bruteforce_threshold,
+        local_bruteforce_cooldown_s=bruteforce_cooldown_s
     )
     print(f"agent: mode={mode} read={stats.read} parsed={stats.parsed} sent={stats.sent} failed={stats.failed}")
 
@@ -198,7 +152,8 @@ def doctor(config: Path = typer.Option(Path("configs/agent.example.yaml"), "--co
 
     # Candidate file checks (informational)
     from minisoc.agent.sources import DEFAULT_AUTH_PATH_CANDIDATES
-    import os, shutil
+    import os
+    import shutil
     for c in DEFAULT_AUTH_PATH_CANDIDATES:
         readable = c.exists() and c.is_file() and os.access(c, os.R_OK)
         print(f"candidate: {c} exists={c.exists()} readable={readable}")

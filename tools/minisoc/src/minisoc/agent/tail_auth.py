@@ -13,8 +13,8 @@ from uuid import uuid4
 import httpx
 
 from minisoc.agent.sources import follow_file, follow_journal_sshd, pick_auth_source
+from minisoc.agent.suspicious import SuspiciousTracker
 from minisoc.common.schema import NormalizedEvent
-
 
 log = logging.getLogger("minisoc.agent")
 
@@ -91,12 +91,26 @@ def run_tail_auth(
     from_start_live: bool,
     source: SourcePref = "auto",
     heartbeat_s: float | None = 30.0,
+    suspicious_log_path: Path | None = None,
+    local_bruteforce_window_s: int = 60,
+    local_bruteforce_threshold: int = 5,
+    local_bruteforce_cooldown_s: int = 60,
 ) -> TailStats:
     """
     live: follow forever
     replay: read once then exit
     """
     stats = TailStats()
+
+    tracker = None
+    if suspicious_log_path:
+        tracker = SuspiciousTracker(
+            path=suspicious_log_path,
+            window_s=local_bruteforce_window_s,
+            threshold=local_bruteforce_threshold,
+            cooldown_s=local_bruteforce_cooldown_s,
+        )
+
     decision = pick_auth_source(log_path, prefer=source)
 
     # banner: what we picked and why
@@ -134,6 +148,11 @@ def run_tail_auth(
                     print(json.dumps(ev.model_dump(mode="json", by_alias=True)))
                 else:
                     try:
+                        if tracker and ev.event.outcome == "failure":
+                            try:
+                                tracker.observe_failure(ev)
+                            except Exception:
+                                pass
                         send_event(client, server_url, ev)
                         stats = TailStats(read=stats.read, parsed=stats.parsed, sent=stats.sent + 1, failed=stats.failed)
                     except Exception:
