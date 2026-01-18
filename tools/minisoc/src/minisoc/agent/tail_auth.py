@@ -10,11 +10,17 @@ from pathlib import Path
 from typing import Literal
 from uuid import uuid4
 
-import httpx
-
 from minisoc.agent.sources import follow_file, follow_journal_sshd, pick_auth_source
 from minisoc.agent.suspicious import SuspiciousTracker
 from minisoc.common.schema import NormalizedEvent
+import httpx
+
+
+
+def _strip_syslog_prefix(line: str) -> str:
+    # Accept either syslog-shaped lines or journald '-o cat' lines.
+    # Example syslog: 'Jan 18 00:00:23 host sshd[2215]: Failed password ...'
+    return re.sub(r"^[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\S+\s+", "", line)
 
 log = logging.getLogger("minisoc.agent")
 
@@ -38,6 +44,7 @@ class TailStats:
 
 
 def parse_sshd_line(line: str, *, host: str, host_ip: str | None, source_path: str) -> NormalizedEvent | None:
+    line = _strip_syslog_prefix(line)
     m = SSH_FAIL.search(line)
     outcome = None
     sev = None

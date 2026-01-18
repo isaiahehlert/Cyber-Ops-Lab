@@ -36,7 +36,7 @@ def journalctl_available() -> bool:
     # fast, cheap capability probe
     try:
         r = subprocess.run(
-            ["journalctl", "--version"],
+            ["journalctl","-f","-o","cat","-u","ssh","-u","sshd","--no-pager"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
