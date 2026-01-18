@@ -36,7 +36,7 @@ def journalctl_available() -> bool:
     # fast, cheap capability probe
     try:
         r = subprocess.run(
-            ["journalctl","-f","-o","cat","-u","ssh","-u","sshd","--no-pager"],
+            ["journalctl","-f","-o","short","-u","ssh","-u","sshd","--no-pager"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
             check=False,
@@ -114,10 +114,10 @@ def follow_journal_sshd(*, from_start: bool) -> Iterator[str]:
     from_start=False: follow new messages
     from_start=True: replay available history (can be large on real boxes)
     """
-    args = ["journalctl", "-f", "-o", "cat"]
+    args = ["journalctl", "-f", "-o", "short"]
     if from_start:
         # no -f history-only mode would exit; we want history + follow
-        args = ["journalctl", "-o", "cat", "-f"]
+        args = ["journalctl", "-o", "short", "-f"]
     # Filter to sshd-ish lines. We avoid unit names because distro differs.
     p = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
     assert p.stdout is not None
