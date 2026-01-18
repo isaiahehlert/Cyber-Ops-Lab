@@ -22,6 +22,24 @@ def _strip_syslog_prefix(line: str) -> str:
     # Example syslog: 'Jan 18 00:00:23 host sshd[2215]: Failed password ...'
     return re.sub(r"^[A-Z][a-z]{2}\s+\d+\s+\d{2}:\d{2}:\d{2}\s+\S+\s+", "", line)
 
+def _normalize_journal_message(line: str) -> str:
+    """
+    journald -o cat often emits message-only lines, e.g.:
+      "Failed password for pi from 192.168.0.102 port 49280 ssh2"
+    Our sshd parser expects syslog-ish lines containing "sshd[...]:".
+    This function wraps message-only sshd lines into a syslog-like string.
+    """
+    s = line.strip()
+    if not s:
+        return s
+    # If it already looks syslog-ish, keep it.
+    if "sshd[" in s or "sshd:" in s:
+        return s
+    # Common sshd messages (message-only)
+    if s.startswith("Failed password ") or s.startswith("Invalid user ") or s.startswith("Connection closed by "):
+        return f"sshd[0]: {s}"
+    return s
+
 log = logging.getLogger("minisoc.agent")
 
 Mode = Literal["live", "replay"]
