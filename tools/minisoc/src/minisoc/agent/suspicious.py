@@ -31,6 +31,7 @@ class SuspiciousTracker:
         self.cooldown_s = max(0, int(cooldown_s))
         self._state: Dict[str, _IPState] = {}
         self.path.parent.mkdir(parents=True, exist_ok=True)
+        self.path.touch(exist_ok=True)
 
     def observe_failure(self, ev: NormalizedEvent) -> None:
         ip = (ev.src.ip if ev.src else None) or ""

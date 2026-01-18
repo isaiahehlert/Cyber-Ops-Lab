@@ -42,6 +42,8 @@ def _normalize_journal_message(line: str) -> str:
 
 log = logging.getLogger("minisoc.agent")
 
+DEBUG_SAMPLE_LINES = 10
+
 Mode = Literal["live", "replay"]
 SourcePref = Literal["auto", "file", "journal"]
 
@@ -129,6 +131,7 @@ def run_tail_auth(
 
     source_kind = source
     tracker = None
+    debug_sample_remaining = DEBUG_SAMPLE_LINES
     if suspicious_log_path:
         tracker = SuspiciousTracker(
             path=suspicious_log_path,
@@ -168,6 +171,9 @@ def run_tail_auth(
             stats = TailStats(read=stats.read + 1, parsed=stats.parsed, sent=stats.sent, failed=stats.failed)
         if source_kind == "journal":
             line = _normalize_journal_message(line)
+            if debug_sample_remaining > 0:
+                log.info(f"RAW(journal): {line}")
+                debug_sample_remaining -= 1
 
 
             ev = parse_sshd_line(line, host=host, host_ip=host_ip, source_path=source_path)
