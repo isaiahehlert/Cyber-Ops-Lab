@@ -1,11 +1,10 @@
 from __future__ import annotations
+import logging
 
 import os
 import subprocess
 import time
-from collections import deque
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterator, Literal
 
@@ -35,18 +34,17 @@ def _is_readable_file(p: Path) -> bool:
 
 
 def journalctl_available() -> bool:
-    # cheap capability probe; no follow mode, no buffering issues
     try:
         r = subprocess.run(
-            ["journalctl", "-n", "1", "-o", "short", "-u", "ssh", "-u", "sshd", "--no-pager"],
+            ["journalctl", "-n", "0", "--show-cursor", "--no-pager"],
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
+            timeout=2,
             check=False,
         )
         return r.returncode == 0
     except Exception:
         return False
-
 
 def pick_auth_source(
     requested_path: Path | None,
@@ -110,71 +108,67 @@ def follow_file(path: Path, *, from_start: bool, sleep_s: float = 0.2) -> Iterat
 
 def follow_journal_sshd(*, from_start: bool, poll_s: float = 0.35) -> Iterator[str]:
     """
-    GUARANTEED journald reader (no `journalctl -f`).
-    We poll `journalctl --since <time>` repeatedly and de-dupe lines.
-
-    Why: `journalctl -f` + pipes can stall forever due to buffering behavior.
-    Polling avoids that entire failure class.
+    GUARANTEED journald reader using cursors (no `journalctl -f`, no `--since`).
+    - Keeps a journal cursor and requests entries after it.
+    - Avoids buffering/locale/since-format issues entirely.
     """
-    # Start window:
-    # - from_start: go way back
-    # - live: start a few minutes back so we catch immediate attempts
-    if from_start:
-        since = "1970-01-01 00:00:00"
-    else:
-        since = (datetime.now() - timedelta(minutes=10)).strftime("%Y-%m-%d %H:%M:%S")
+    import re
 
-    # de-dupe sliding window of recent lines
-    recent = deque(maxlen=500)
-    recent_set: set[str] = set()
+    log = logging.getLogger("minisoc.agent.sources")
+    cursor_re = re.compile(r"^-- cursor:\s*(.+)\s*$")
 
-    def bump_recent(s: str) -> bool:
-        # returns True if new
-        if s in recent_set:
-            return False
-        recent.append(s)
-        recent_set.add(s)
-        # keep set in sync with deque
-        if len(recent) == recent.maxlen:
-            # rebuild occasionally to avoid set growth
-            recent_set.clear()
-            recent_set.update(recent)
-        return True
-
-    while True:
-        # overlap slightly to avoid missing boundary events
-        # (we de-dupe so overlap is safe)
+    def run_journalctl(extra: list[str]) -> tuple[list[str], str | None]:
         args = [
             "journalctl",
-            "-o",
-            "short",
-            "-u",
-            "ssh",
-            "-u",
-            "sshd",
-            "--since",
-            since,
+            "-o", "short",
+            "-u", "ssh",
+            "-u", "sshd",
             "--no-pager",
+            "--show-cursor",
+            *extra,
         ]
-        try:
-            r = subprocess.run(
-                args,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                check=False,
-            )
-            if r.stdout:
-                for line in r.stdout.splitlines():
-                    line = line.rstrip("\n")
-                    if not line:
-                        continue
-                    if bump_recent(line):
-                        yield line
-        except Exception:
-            # don't die: keep trying
-            pass
+        out = subprocess.run(
+            args,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+        ).stdout
 
-        # move cursor forward (small overlap)
-        since = (datetime.now() - timedelta(seconds=1)).strftime("%Y-%m-%d %H:%M:%S")
+        out_lines = out.splitlines()
+        cur = None
+        keep: list[str] = []
+        for ln in out_lines:
+            m = cursor_re.match(ln)
+            if m:
+                cur = m.group(1).strip()
+            elif ln.strip():
+                keep.append(ln.rstrip("\n"))
+        return keep, cur
+
+    cursor: str | None = None
+
+    if not from_start:
+        # establish "current" cursor without consuming entries
+        _ignored, cur = run_journalctl(["-n", "0"])
+        cursor = cur
+        if cursor is None:
+            # fallback: take cursor from last entry (discard it)
+            _ignored, cursor = run_journalctl(["-n", "1"])
+            if cursor is None:
+                log.warning("journalctl cursor probe failed; proceeding without cursor (from_start behavior).")
+
+    while True:
+        extra: list[str] = []
+        if cursor:
+            extra += ["--after-cursor", cursor]
+
+        new_lines, new_cursor = run_journalctl(extra)
+        if new_cursor:
+            cursor = new_cursor
+
+        for ln in new_lines:
+            yield ln
+
         time.sleep(poll_s)
+
