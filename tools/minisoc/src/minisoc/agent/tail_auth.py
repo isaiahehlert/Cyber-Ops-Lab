@@ -127,6 +127,7 @@ def run_tail_auth(
     """
     stats = TailStats()
 
+    source_kind = source
     tracker = None
     if suspicious_log_path:
         tracker = SuspiciousTracker(
@@ -138,6 +139,7 @@ def run_tail_auth(
 
     decision = pick_auth_source(log_path, prefer=source)
 
+    source_kind = decision.kind
     # banner: what we picked and why
     log.info(
         "agent source selected: kind=%s path=%s reason=%s",
@@ -164,6 +166,9 @@ def run_tail_auth(
     with httpx.Client(timeout=5.0) as client:
         for line in iterator:
             stats = TailStats(read=stats.read + 1, parsed=stats.parsed, sent=stats.sent, failed=stats.failed)
+        if source_kind == "journal":
+            line = _normalize_journal_message(line)
+
 
             ev = parse_sshd_line(line, host=host, host_ip=host_ip, source_path=source_path)
             if ev:
