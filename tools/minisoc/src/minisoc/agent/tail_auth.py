@@ -176,6 +176,12 @@ def run_tail_auth(
                 debug_sample_remaining -= 1
 
 
+            # --- DEBUG/ROBUSTNESS: always let parser try; log first N raw lines ---
+            if source_kind == "journal":
+                line = _normalize_journal_message(line)
+            if debug_sample_remaining > 0:
+                log.info("RAW(%s): %s", source_kind, line)
+                debug_sample_remaining -= 1
             ev = parse_sshd_line(line, host=host, host_ip=host_ip, source_path=source_path)
             if ev:
                 stats = TailStats(read=stats.read, parsed=stats.parsed + 1, sent=stats.sent, failed=stats.failed)
