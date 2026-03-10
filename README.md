@@ -78,6 +78,8 @@ peak burst 10 req/sec from 192.168.1.25
 ---
 
 # 🖥️ Dashboard Features
+<img width="1920" height="959" alt="Screenshot 2026-03-10 at 12 28 40 PM" src="https://github.com/user-attachments/assets/d12cf892-d189-4d9b-8db1-a835e230e0db" />
+
 
 The Sentinel dashboard provides:
 
@@ -111,6 +113,9 @@ python sentinel_demo/scripts/run_ddos.py –target
 ---
 
 # 📊 Example Detection Output
+<img width="1905" height="959" alt="Screenshot 2026-03-10 at 12 39 01 PM" src="https://github.com/user-attachments/assets/6f3be617-158e-4784-9b9f-d43e56ec923f" />
+
+
 ALERT: ssh_takeover detected
 
 source_ip: 192.168.88.8
