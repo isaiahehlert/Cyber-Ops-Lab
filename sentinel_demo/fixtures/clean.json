@@ -1,0 +1,8 @@
+{
+  "ssh_logs": [
+    "Mar 2 01:00:00 host sshd[1]: Accepted publickey for isaiah from 1.1.1.1 port 22 ssh2"
+  ],
+  "access_logs": [
+    "1.1.1.1 - - [02/Mar/2026:01:00:00 +0000] \"GET / HTTP/1.1\" 200 512"
+  ]
+}

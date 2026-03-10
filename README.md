@@ -1,35 +1,151 @@
-# 🛡️ Cyber-Ops-Lab
+# 🛡️ Sentinel Security Dashboard
 
-A repository of customized tools, logs, and documentation used in cybersecurity research, testing, and learning.
+**Sentinel** is a lightweight security monitoring and attack-detection demonstration platform designed to simulate real-time security telemetry analysis.
 
-## 📁 Directories
+It detects and visualizes common attack patterns including:
 
-- `scripts/`: Python tools for recon, scanning, and parsing
-- `logs/`: Packet captures, system events, traffic analysis
-- `tools/`: Helpers & wrappers for utilities like Nmap
-- `references/`: Cheat sheets and study notes (Linux, regex, vulnerabilities)
+• SSH brute force attacks  
+• SSH account takeover attempts  
+• HTTP request spikes / potential DDoS activity  
 
-## 🚧 Status
-Project under active development. Tools and references are being added progressively.
+The system demonstrates how telemetry ingestion, detection logic, and visualization layers interact in a modern security monitoring pipeline.
+
 ---
 
-## 🧰 Current Toolset
+# ⚙️ Architecture
 
-### `minisoc/` — Minimal SOC Simulator  
-A self-contained detection lab framework designed for simulating alert workflows, replaying attack scenarios, and testing detection logic.
+Sentinel consists of two components:
 
-**Features:**
-- 🧪 Agent/server model for replaying telemetry
-- ⚙️ Configurable replay scenarios (JSONL)
-- 🔎 Example detections (impossible travel, password spray, SSH brute-force)
-- 🧼 Clean Python CLI interface via `cli.py`
-- 🧪 Test coverage in `tests/`
-- 🐍 Built with `pyproject.toml` (PEP 518-style)
+### 1️⃣ Monitoring Server
+Runs on a host machine (Mac Mini in demo).
 
-**Paths:**
-- `tools/minisoc/configs/` — Example configs
-- `tools/minisoc/data/replay_scenarios/` — JSONL attack flows
-- `tools/minisoc/src/minisoc/` — Agent, server, CLI logic
-- `tools/minisoc/tests/` — Unit tests for detection + storage
+Responsibilities:
 
-> See the [`tools/minisoc/README.md`](./tools/minisoc/README.md) for more information.
+• Receive security telemetry over LAN  
+• Run detection heuristics  
+• Maintain event history  
+• Display live dashboard  
+
+Tech stack:
+
+• Python  
+• FastAPI  
+• Uvicorn  
+• Vanilla JS dashboard  
+
+---
+
+### 2️⃣ Attack Simulation Client
+Runs on a separate machine (laptop).
+
+Simulates adversary activity by sending telemetry events to the monitoring server.
+
+Attack scenarios include:
+
+• SSH brute force  
+• SSH takeover sequence  
+• HTTP burst / DDoS simulation  
+
+---
+
+# 🧠 Detection Logic
+
+Sentinel applies heuristic detection rules to incoming telemetry.
+
+### SSH Brute Force
+
+Triggered when:
+failed_attempts >= 5
+Example detection:
+5 failed SSH auth attempts from 192.168.1.25
+---
+
+### SSH Account Takeover
+
+Triggered when:
+failed_attempts >= 10
+followed by successful login
+Example:
+10 failed SSH attempts followed by successful login
+---
+
+### HTTP Burst / DDoS Spike
+
+Triggered when:
+= 10 HTTP requests in rapid succession
+Example:
+peak burst 10 req/sec from 192.168.1.25
+---
+
+# 🖥️ Dashboard Features
+
+The Sentinel dashboard provides:
+
+• live monitoring indicator  
+• animated alert banners  
+• event severity classification  
+• detection history  
+• source IP analysis  
+• attack evidence summaries  
+
+---
+
+# 🧪 Demo Workflow
+
+1️⃣ Start Sentinel server
+uvicorn sentinel_demo.app.main:app –host 0.0.0.0 –port 8080 –reload
+---
+
+2️⃣ Launch dashboard
+http://:8080
+---
+
+3️⃣ Run simulated attacks from client machine
+
+### SSH brute force
+python sentinel_demo/scripts/run_ssh_bruteforce.py –target 
+### SSH takeover
+python sentinel_demo/scripts/run_ssh_takeover.py –target 
+### HTTP spike
+python sentinel_demo/scripts/run_ddos.py –target 
+---
+
+# 📊 Example Detection Output
+ALERT: ssh_takeover detected
+
+source_ip: 192.168.88.8
+failed_attempts: 18
+successful_login: true
+severity: medium
+---
+
+# 🔬 Purpose
+
+Sentinel was built as a demonstration of:
+
+• security telemetry ingestion  
+• detection heuristics  
+• real-time monitoring dashboards  
+• adversary simulation  
+
+It is designed to clearly illustrate the interaction between detection systems and attack activity in a controlled environment.
+
+---
+
+# 👨‍💻 Developer
+
+Isaiah Ehlert
+
+Cybersecurity Researcher  
+Sentinel Research Group
+
+GitHub
+
+https://github.com/isaiahehlert/Cyber-Ops-Lab
+
+---
+
+# ⚠️ Disclaimer
+
+Sentinel is a **security research and demonstration platform** intended for educational use.
+

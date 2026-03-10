@@ -1,0 +1,10 @@
+{
+  "ssh_fail_threshold": 5,
+  "ssh_logs": [
+    "Mar 2 01:00:00 host sshd[111]: Failed password for invalid user admin from 5.5.5.5 port 42001 ssh2",
+    "Mar 2 01:00:01 host sshd[112]: Failed password for invalid user admin from 5.5.5.5 port 42002 ssh2",
+    "Mar 2 01:00:02 host sshd[113]: Failed password for invalid user admin from 5.5.5.5 port 42003 ssh2",
+    "Mar 2 01:00:03 host sshd[114]: Failed password for invalid user admin from 5.5.5.5 port 42004 ssh2",
+    "Mar 2 01:00:04 host sshd[115]: Failed password for invalid user admin from 5.5.5.5 port 42005 ssh2"
+  ]
+}
