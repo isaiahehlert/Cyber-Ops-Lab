@@ -118,8 +118,8 @@ python sentinel_demo/scripts/run_ddos.py –target
 
 ALERT: ssh_takeover detected
 
-source_ip: 192.168.88.8
-failed_attempts: 18
+source_ip: 192.168.88.37
+failed_attempts: 55
 successful_login: true
 severity: medium
 ---
